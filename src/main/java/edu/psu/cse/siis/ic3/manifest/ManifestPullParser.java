@@ -18,10 +18,12 @@
  */
 package edu.psu.cse.siis.ic3.manifest;
 
+import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,8 +31,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -45,11 +45,11 @@ import edu.psu.cse.siis.ic3.Ic3Data.Attribute;
 import edu.psu.cse.siis.ic3.Ic3Data.AttributeKind;
 import edu.psu.cse.siis.ic3.db.Constants;
 import edu.psu.cse.siis.ic3.db.SQLConnection;
-import edu.psu.cse.siis.ic3.manifest.binary.AXmlResourceParser;
+import net.dongliu.apk.parser.ApkFile;
 
 public class ManifestPullParser {
   private static final String MANIFEST = "manifest";
-  private static final String MANIFEST_FILE_NAME = "AndroidManifest.xml";
+  // private static final String MANIFEST_FILE_NAME = "AndroidManifest.xml";
   private static final String ACTIVITY = "activity";
   private static final String ACTIVITY_ALIAS = "activity-alias";
   private static final String SERVICE = "service";
@@ -183,42 +183,24 @@ public class ManifestPullParser {
       if (manifest.endsWith(".xml")) {
         loadClassesFromTextManifest(new FileInputStream(manifest));
       } else {
-        handleBinaryManifestFile(manifest);
+        String manifestXml = loadTextManifest(manifest);
+        InputStream stream = new ByteArrayInputStream(manifestXml.getBytes(StandardCharsets.UTF_8));
+        loadClassesFromTextManifest(stream);
       }
-    } catch (FileNotFoundException e) {
-      e.printStackTrace();
-    }
-  }
-
-  private void handleBinaryManifestFile(String apk) {
-    try {
-      ZipFile archive = new ZipFile(apk);
-      ZipEntry manifestEntry = archive.getEntry(MANIFEST_FILE_NAME);
-      if (manifestEntry == null) {
-        archive.close();
-        throw new RuntimeException("No manifest file found in apk");
-      }
-      loadClassesFromBinaryManifest(archive.getInputStream(manifestEntry));
-      archive.close();
     } catch (IOException e) {
-      throw new RuntimeException("Error while processing apk " + apk + ": " + e);
+      e.printStackTrace();
     }
   }
 
-  protected void loadClassesFromBinaryManifest(InputStream manifestIS) {
-    AXmlResourceParser aXmlResourceParser = new AXmlResourceParser();
-    aXmlResourceParser.open(manifestIS);
-    try {
-      parse(aXmlResourceParser);
-    } catch (XmlPullParserException | IOException e) {
-      e.printStackTrace();
-      throw new RuntimeException("Could not parse manifest file.");
+  private String loadTextManifest(String manifest) throws IOException {
+    try (ApkFile apkFile = new ApkFile(new File(manifest))) {
+      return apkFile.getManifestXml();
     }
   }
 
   protected void loadClassesFromTextManifest(InputStream manifestIS) {
     try {
-      XmlPullParserFactory xmlPullParserFactory = XmlPullParserFactory.newInstance();
+      XmlPullParserFactory xmlPullParserFactory = new org.xmlpull.mxp1.MXParserFactory();
       xmlPullParserFactory.setNamespaceAware(true);
       XmlPullParser parser = xmlPullParserFactory.newPullParser();
       parser.setInput(manifestIS, null);
@@ -264,16 +246,16 @@ public class ManifestPullParser {
   public Map<String, Integer> writeToDb(boolean skipEntryPoints) {
     Map<String, Integer> componentIds = new HashMap<String, Integer>();
 
-    componentIds.putAll(SQLConnection.insert(getPackageName(), version, activities,
-        usesPermissions, permissions, skipEntryPoints));
-    componentIds.putAll(SQLConnection.insert(getPackageName(), version, activityAliases, null,
-        null, skipEntryPoints));
-    componentIds.putAll(SQLConnection.insert(getPackageName(), version, services, null, null,
+    componentIds.putAll(SQLConnection.insert(getPackageName(), version, activities, usesPermissions,
+        permissions, skipEntryPoints));
+    componentIds.putAll(SQLConnection.insert(getPackageName(), version, activityAliases, null, null,
         skipEntryPoints));
-    componentIds.putAll(SQLConnection.insert(getPackageName(), version, receivers, null, null,
-        skipEntryPoints));
-    componentIds.putAll(SQLConnection.insert(getPackageName(), version, providers, null, null,
-        skipEntryPoints));
+    componentIds.putAll(
+        SQLConnection.insert(getPackageName(), version, services, null, null, skipEntryPoints));
+    componentIds.putAll(
+        SQLConnection.insert(getPackageName(), version, receivers, null, null, skipEntryPoints));
+    componentIds.putAll(
+        SQLConnection.insert(getPackageName(), version, providers, null, null, skipEntryPoints));
 
     return componentIds;
   }
@@ -297,14 +279,14 @@ public class ManifestPullParser {
 
     Map<String, Ic3Data.Application.Component.Builder> componentNameToBuilderMap = new HashMap<>();
 
-    componentNameToBuilderMap.putAll(populateProtobufComponentBuilders(activities,
-        ComponentKind.ACTIVITY));
-    componentNameToBuilderMap.putAll(populateProtobufComponentBuilders(services,
-        ComponentKind.SERVICE));
-    componentNameToBuilderMap.putAll(populateProtobufComponentBuilders(receivers,
-        ComponentKind.RECEIVER));
-    componentNameToBuilderMap.putAll(populateProtobufComponentBuilders(providers,
-        ComponentKind.PROVIDER));
+    componentNameToBuilderMap
+        .putAll(populateProtobufComponentBuilders(activities, ComponentKind.ACTIVITY));
+    componentNameToBuilderMap
+        .putAll(populateProtobufComponentBuilders(services, ComponentKind.SERVICE));
+    componentNameToBuilderMap
+        .putAll(populateProtobufComponentBuilders(receivers, ComponentKind.RECEIVER));
+    componentNameToBuilderMap
+        .putAll(populateProtobufComponentBuilders(providers, ComponentKind.PROVIDER));
 
     return componentNameToBuilderMap;
   }
@@ -349,8 +331,8 @@ public class ManifestPullParser {
             value.remove(null);
             value.add(edu.psu.cse.siis.coal.Constants.NULL_STRING);
           }
-          filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.ACTION)
-              .addAllValue(value));
+          filterBuilder.addAttributes(
+              Attribute.newBuilder().setKind(AttributeKind.ACTION).addAllValue(value));
         }
         value = filter.getCategories();
         if (value != null) {
@@ -358,14 +340,14 @@ public class ManifestPullParser {
             value.remove(null);
             value.add(edu.psu.cse.siis.coal.Constants.NULL_STRING);
           }
-          filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.CATEGORY)
-              .addAllValue(value));
+          filterBuilder.addAttributes(
+              Attribute.newBuilder().setKind(AttributeKind.CATEGORY).addAllValue(value));
         }
         if (filter.getData() != null) {
           for (ManifestData data : filter.getData()) {
             if (data.getHost() != null) {
-              filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.HOST)
-                  .addValue(data.getHost()));
+              filterBuilder.addAttributes(
+                  Attribute.newBuilder().setKind(AttributeKind.HOST).addValue(data.getHost()));
             }
             if (data.getMimeType() != null) {
               // String[] typeParts = data.getMimeType().split("/");
@@ -378,22 +360,22 @@ public class ManifestPullParser {
               // type = Constants.ANY_STRING;
               // subtype = Constants.ANY_STRING;
               // }
-              filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.TYPE)
-                  .addValue(data.getMimeType()));
+              filterBuilder.addAttributes(
+                  Attribute.newBuilder().setKind(AttributeKind.TYPE).addValue(data.getMimeType()));
               // filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.SUBTYPE)
               // .addValue(subtype));
             }
             if (data.getPath() != null) {
-              filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.PATH)
-                  .addValue(data.getPath()));
+              filterBuilder.addAttributes(
+                  Attribute.newBuilder().setKind(AttributeKind.PATH).addValue(data.getPath()));
             }
             if (data.getPort() != null) {
-              filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.PORT)
-                  .addValue(data.getPort()));
+              filterBuilder.addAttributes(
+                  Attribute.newBuilder().setKind(AttributeKind.PORT).addValue(data.getPort()));
             }
             if (data.getScheme() != null) {
-              filterBuilder.addAttributes(Attribute.newBuilder().setKind(AttributeKind.SCHEME)
-                  .addValue(data.getScheme()));
+              filterBuilder.addAttributes(
+                  Attribute.newBuilder().setKind(AttributeKind.SCHEME).addValue(data.getScheme()));
             }
           }
         }
@@ -654,9 +636,8 @@ public class ManifestPullParser {
       }
     }
 
-    if (name == null
-        || (targetActivity != null && !entryPointClasses
-            .contains(canonicalizeComponentName(targetActivity)))) {
+    if (name == null || (targetActivity != null
+        && !entryPointClasses.contains(canonicalizeComponentName(targetActivity)))) {
       skipToEndTag = endTag;
       return true;
     }
@@ -664,9 +645,8 @@ public class ManifestPullParser {
     if (permission == null) {
       permission = applicationPermission;
     }
-    currentComponent =
-        new ManifestComponent(componentType, canonicalizeComponentName(name), isExported,
-            foundExported, permission, targetActivity, null, null, null);
+    currentComponent = new ManifestComponent(componentType, canonicalizeComponentName(name),
+        isExported, foundExported, permission, targetActivity, null, null, null);
 
     return true;
   }
@@ -819,7 +799,8 @@ public class ManifestPullParser {
       if (attributeName.equals(PACKAGE)) {
         // No namespace requirement.
         setPackageName(parser.getAttributeValue(i));
-      } else if (parser.getAttributeNamespace(i).equals(NAMESPACE) && attributeName.equals(VERSION)) {
+      } else if (parser.getAttributeNamespace(i).equals(NAMESPACE)
+          && attributeName.equals(VERSION)) {
         version = Integer.parseInt(parser.getAttributeValue(i));
       }
     }

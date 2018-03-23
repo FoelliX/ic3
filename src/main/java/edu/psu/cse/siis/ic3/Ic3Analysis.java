@@ -40,16 +40,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xmlpull.v1.XmlPullParserException;
 
-import soot.PackManager;
-import soot.Scene;
-import soot.SootClass;
-import soot.SootMethod;
-import soot.Transform;
-import soot.Value;
-import soot.jimple.StaticFieldRef;
-import soot.jimple.infoflow.android.data.AndroidMethod;
-import soot.jimple.infoflow.android.manifest.ProcessManifest;
-import soot.options.Options;
 import edu.psu.cse.siis.coal.Analysis;
 import edu.psu.cse.siis.coal.AnalysisParameters;
 import edu.psu.cse.siis.coal.FatalAnalysisException;
@@ -61,6 +51,16 @@ import edu.psu.cse.siis.coal.arguments.MethodReturnValueManager;
 import edu.psu.cse.siis.coal.field.transformers.FieldTransformerManager;
 import edu.psu.cse.siis.ic3.db.SQLConnection;
 import edu.psu.cse.siis.ic3.manifest.ManifestPullParser;
+import soot.PackManager;
+import soot.Scene;
+import soot.SootClass;
+import soot.SootMethod;
+import soot.Transform;
+import soot.Value;
+import soot.jimple.StaticFieldRef;
+import soot.jimple.infoflow.android.data.AndroidMethod;
+import soot.jimple.infoflow.android.manifest.ProcessManifest;
+import soot.options.Options;
 
 public class Ic3Analysis extends Analysis<Ic3CommandLineArguments> {
   private static final String INTENT = "android.content.Intent";
@@ -69,8 +69,8 @@ public class Ic3Analysis extends Analysis<Ic3CommandLineArguments> {
   private static final String COMPONENT_NAME = "android.content.ComponentName";
   private static final String ACTIVITY = "android.app.Activity";
 
-  private static final String[] frameworkClassesArray = { INTENT, INTENT_FILTER, BUNDLE,
-      COMPONENT_NAME, ACTIVITY };
+  private static final String[] frameworkClassesArray =
+      { INTENT, INTENT_FILTER, BUNDLE, COMPONENT_NAME, ACTIVITY };
   protected static final List<String> frameworkClasses = Arrays.asList(frameworkClassesArray);
 
   private final Logger logger = LoggerFactory.getLogger(getClass());
@@ -131,9 +131,8 @@ public class Ic3Analysis extends Analysis<Ic3CommandLineArguments> {
     }
 
     Timers.v().mainGeneration.start();
-    setupApplication =
-        new SetupApplication(commandLineArguments.getManifest(), commandLineArguments.getInput(),
-            commandLineArguments.getClasspath());
+    setupApplication = new SetupApplication(commandLineArguments.getManifest(),
+        commandLineArguments.getInput(), commandLineArguments.getClasspath());
 
     Map<String, Set<String>> callBackMethods;
 
@@ -145,8 +144,8 @@ public class Ic3Analysis extends Analysis<Ic3CommandLineArguments> {
         entryPointClasses = manifest.getEntryPointClasses();
         packageName = manifest.getPackageName();
       } catch (IOException | XmlPullParserException e) {
-        throw new FatalAnalysisException("Could not process manifest file "
-            + commandLineArguments.getManifest() + ": " + e);
+        throw new FatalAnalysisException(
+            "Could not process manifest file " + commandLineArguments.getManifest() + ": " + e);
       }
     } else {
       entryPointClasses = detailedManifest.getEntryPointClasses();
@@ -245,8 +244,8 @@ public class Ic3Analysis extends Analysis<Ic3CommandLineArguments> {
   @Override
   protected void setApplicationClasses(Ic3CommandLineArguments commandLineArguments)
       throws FatalAnalysisException {
-    AnalysisParameters.v().addAnalysisClasses(
-        computeAnalysisClasses(commandLineArguments.getInput()));
+    AnalysisParameters.v()
+        .addAnalysisClasses(computeAnalysisClasses(commandLineArguments.getInput()));
     AnalysisParameters.v().addAnalysisClasses(frameworkClasses);
   }
 
@@ -323,9 +322,8 @@ public class Ic3Analysis extends Analysis<Ic3CommandLineArguments> {
 
               @Override
               public boolean filterOut(Value symbol) {
-                return symbol instanceof StaticFieldRef
-                    && ((StaticFieldRef) symbol).getField().getDeclaringClass().getName()
-                        .startsWith("android.provider");
+                return symbol instanceof StaticFieldRef && ((StaticFieldRef) symbol).getField()
+                    .getDeclaringClass().getName().startsWith("android.provider");
               }
             })));
     if (PackManager.v().getPack(pack).get(pack + ".ifds") == null) {
@@ -349,9 +347,8 @@ public class Ic3Analysis extends Analysis<Ic3CommandLineArguments> {
       Map<String, Set<String>> entryPointMapping, Map<SootMethod, Set<String>> entryPointMap) {
     String pack = AnalysisParameters.v().useShimple() ? "wstp" : "wjtp";
 
-    Transform transform =
-        new Transform(pack + ".epm", new EntryPointMappingSceneTransformer(entryPointClasses,
-            entryPointMapping, entryPointMap));
+    Transform transform = new Transform(pack + ".epm",
+        new EntryPointMappingSceneTransformer(entryPointClasses, entryPointMapping, entryPointMap));
     if (PackManager.v().getPack(pack).get(pack + ".epm") == null) {
       PackManager.v().getPack(pack).add(transform);
     } else {
